@@ -10,6 +10,7 @@
 
 **images/** A subfolder containing visual assets related to the dataset. These are IHC images to be used in the neural networks. They are downscaled from ~ 80,000x80,000 pixels to 512x512. Future images may be slides from original images if NN accuracy calls for increased resolution.
 
+**image_slide_proccessor.ipynb** - A jupyterlab script that contains the code used to transfer images in NDPI form from the hard drives onto a local machine in .png form at a resolution of 512x512. Can be tweaked and used to create slides of various sizes and contains a filter to reduce non-informative slides, as well as create whole slide images of various sizes.
 
 ### Usage Notes
 
