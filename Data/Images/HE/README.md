@@ -1,1 +1,0 @@
-## HE IHC Image File
