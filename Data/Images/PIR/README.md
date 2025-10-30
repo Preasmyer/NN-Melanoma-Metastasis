@@ -1,1 +1,0 @@
-## PIR IHC Image Folder

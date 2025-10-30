@@ -1,1 +1,0 @@
-## BRAF IHC Images
