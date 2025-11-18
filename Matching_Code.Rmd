@@ -1,0 +1,181 @@
+---
+title: "Untitled"
+author: "Cameron Preasmyer"
+date: "2025-04-11"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+#| message: false
+#| warning: false
+library(tidymodels)
+```
+
+**Reading in dataframes**
+```{r}
+d1 <- read.csv('/Users/cameronpreasmyer/Desktop/Research\ Documents\ -\ ML\ for\ Melanoma/Files\ of\ Patient\ ID/file_names.csv')
+d2 <- read.csv('/Users/cameronpreasmyer/Desktop/Research\ Documents\ -\ ML\ for\ Melanoma/Files\ of\ Patient\ ID/file_names2.csv')
+d3 <- read.csv('/Users/cameronpreasmyer/Desktop/Research\ Documents\ -\ ML\ for\ Melanoma/Files\ of\ Patient\ ID/file_names3.csv')
+d4 <- read.csv('/Users/cameronpreasmyer/Desktop/Research\ Documents\ -\ ML\ for\ Melanoma/Files\ of\ Patient\ ID/file_names4.csv')
+```
+**Combining by row**
+```{r}
+df <- rbind(d1,d2,d3,d4)
+```
+
+**Filtering by ndpi files (image files)**
+```{r}
+df1 <- df %>% filter(endsWith(df$File.Name,'svs'))
+df2 <- df %>% filter(endsWith(df$File.Name,'ndpi'))
+df <- rbind(df1, df2)
+```
+
+**Breaking the text into workable sections**
+```{r}
+library(tidyr)
+
+df <- df %>%
+  separate(File.Name, into = c("PatientID", "ProteinType", "FileType"), sep = " - |\\.\\w+$", remove = FALSE, extra = "merge") %>%
+  mutate(FileType = sub("^.*\\.", ".", File.Name)) # Extract the file type
+print(df)
+```
+
+**Ensuring Protein Column is accurate and imported from File.Name**
+```{r}
+proteins <- c("ANX", "BCL2", "BCL3", "MITF", "PIR", "PBP", "HX", 'HE', 'BRAF')
+df <- df %>%
+  mutate(ProteinType = case_when(
+    grepl("ANX", File.Name) ~ "ANX",
+    grepl("BCL2", File.Name) ~ "BCL2",
+    grepl("BCL3", File.Name) ~ "BCL3",
+    grepl("MITF", File.Name) ~ "MITF",
+    grepl("PIR", File.Name) ~ "PIR",
+    grepl("PBP", File.Name) ~ "PBP",
+    grepl("HX", File.Name) ~ "HX",
+    grepl('HE', File.Name) ~ 'HE',
+    grepl('BRAF', File.Name) ~ 'BRAF',
+    grepl('BLC3', File.Name) ~ 'BCL3',
+    grepl('BL2', File.Name)~ 'BCL2',
+    TRUE ~ ProteinType
+  ))
+head(df)
+```
+
+**Cleaning the PatientID Column**
+```{r}
+library(stringr)
+protein_pattern <- paste(proteins, collapse = "|")
+df <- df %>%
+  mutate(PatientID = str_remove_all(PatientID, protein_pattern))
+df <- df %>%
+  mutate(PatientID = sub("-$", "", PatientID)) %>% 
+  mutate(PatientID = sub('_', '-', PatientID)) %>% 
+  mutate(PatientID = sub(" .*", "", PatientID))
+print(df)
+```
+
+**4**
+```{r}
+a <- read.csv('/Users/cameronpreasmyer/Desktop/Research\ Documents\ -\ ML\ for\ Melanoma/Cleaned\ CSV\ files/CombinedCleanedData.csv')
+a <- a %>%
+  mutate(Code = sub('_', '-', Code))
+```
+
+**Creating Column in df that gives the patient ID from a if the Code in a is in the PatientID in df for matching**
+```{r}
+df <- df %>%
+  rowwise() %>%
+  mutate(MatchingID = ifelse(any(str_detect(PatientID, a$Code)), 
+                               a$Code[str_detect(PatientID, a$Code)][1], 
+                               "")) %>%
+  ungroup()
+```
+
+```{r}
+df <- df %>% filter(ProteinType != '')
+```
+
+```{r}
+# Load necessary library
+library(tidyr)
+
+# Pivot data to have a column for each protein type with binary values
+pivoted_df <- df %>%
+  mutate(Presence = 1) %>% # Add a column to indicate presence (binary value 1)
+  pivot_wider(names_from = ProteinType, values_from = Presence, values_fill = list(Presence = 0)) # Pivot and fill missing values with 0
+
+# Print the pivoted dataframe
+print(pivoted_df)
+
+```
+
+
+**Collapse based on Matched ID**
+```{r}
+collapsed_df <- pivoted_df %>%
+  select(-File.Name, -PatientID) %>%
+  group_by(MatchingID) %>% 
+  summarize(across(c(ANX, BCL2, BCL3, HX, MITF, PBP, PIR, BRAF), max), .groups = "drop") %>% 
+  filter(MatchingID != '')
+```
+
+
+Two df's we have now are: df, collapsed_df. df contains filenames, PatientID's and MatchingID's to match to the combined CSV with all measurements as well as filetypes. THis is more descriptive, collapsed df is mainly to append to the measurement CSV.
+
+```{r}
+head(collapsed_df)
+head(df)
+```
+
+
+```{r}
+sum(a$Images)
+nrow(collapsed_df)
+```
+
+There are 40 more observations with images in our combined data with all measurements than in the collapsed df with the images.
+
+```{r}
+duplicate_details <- a %>%
+  filter(Images == 1) %>% 
+  group_by(Code) %>% 
+  summarize(DuplicationCount = n() - 1, .groups = "drop") %>%
+  filter(DuplicationCount > 0)
+
+print(duplicate_details)
+sum(duplicate_details$DuplicationCount)
+```
+
+```{r}
+cols <- c('MatchingID','ANX_image', 'BCL2_image', 'BCL3_image', 'HX_image', 'MITF_image', 'PBP_image', 'PIR_image', 'BRAF_image')
+colnames(collapsed_df)<-cols
+```
+
+It turns out its due to duplicate rows per patient ID. All images should be transferred correctly and can be integrated back in.
+
+```{r}
+merged_df <- a %>%
+  left_join(collapsed_df, by = c("Code" = "MatchingID"))
+print(merged_df)
+```
+
+```{r}
+final_df <- merged_df %>% 
+  select(Code, Sex, Metastasis, Images, ANX_image, BCL2_image, BCL3_image, HX_image, MITF_image, PBP_image, BRAF_image, PIR_image, everything())
+```
+
+final_df should have all of the variables there that we want with the images. 
+
+```{r}
+write.csv(df, file='JoiningDf.csv')
+```
+
+
+# Notes:
+
+We have images for people who were not in the excel sheets used to generate the dataframe. I can look again for these people, they are those that have no 'MatchingID' in the 'df' object. Most ID's are AST_b... and EL-O... patients. Some AST_b... do have images AND representation in the data, but all EL-O pictures do not have representation in the data.

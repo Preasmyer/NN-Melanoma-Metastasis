@@ -1,0 +1,567 @@
+---
+title: "Data Cleaning - Melanoma"
+author: "Cameron Preasmyer"
+date: "2025-03-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Loading Libraries**
+```{r}
+#| warning: false
+#| message: false
+library(tidymodels)
+library(tidyverse)
+```
+
+**Reading in the raw CSV files**
+```{r}
+Bas <- read.csv('/Users/cameronpreasmyer/Desktop/Research\ Documents\ -\ ML\ for\ Melanoma/Raw\ CSV\'s/Basurto_raw.csv')
+Cru <- read.csv('/Users/cameronpreasmyer/Desktop/Research\ Documents\ -\ ML\ for\ Melanoma/Raw\ CSV\'s/Cruces_raw.csv')
+Mel <- read.csv('/Users/cameronpreasmyer/Desktop/Research\ Documents\ -\ ML\ for\ Melanoma/Raw\ CSV\'s/Mel_raw.csv')
+```
+
+# Wrangling Data
+
+**Selecting Columns**
+```{r}
+Mel <- Mel %>% 
+  mutate('added1'=NA) %>% 
+  mutate('added2'=NA)
+Mel <- Mel %>% 
+  dplyr::select(X.2, X.7, X.52, X.54, X.55, X.41,added2, HISTOLOGÍA.LESIÓN.PRIMARIA, X.30, X.31, X.58, X.59, X.60, X.62, X.61, Citocinas.LUMINEX, X.63, Proteinas,CARGA.MUTACIONAL_BIOPSIAS...., INMUNOHISTOQUIMICA, X.69, X.70, X.71,added1, X.72, X.73, X.74, X.75, X.76)
+Bas <- Bas %>% 
+  dplyr::select(CÓDIGO.ELKARTEK, X.1, EVOLUCION, X.13, X.14, HIST_AJCC..FINAL.CODIFICADO, HIST_AJCC_RES.FINAL.CODIFICADO, X.39, X.40, X.41, Citocinas.LUMINEX, X.55, X.56, X.57, X.58, X.59, X.60, PROTEINAS_NIVELES_SERICOS, IHQ, X.73, X.74, X.75, X.76, X.77, X.78, X.79, X.80, X.81, X.82) 
+Cru <- Cru %>% 
+  dplyr::select(X.2, X.3, X.10, X.15, X.16, AJCC.ANT, AJCC.8.ED.revisado.ARRATE, X.48, X.49, X.50, X.65, X.66, X.67, X.68, X.69, X.70, X.71,X.72, X.87, X.88, X.89, X.90, X.91, X.92, X.93, X.94, X.95, X.96, X.97) 
+```
+
+**Defining Column Names for Each CSV**
+```{r}
+Colnames <- c('Code', 'Sex', 'Metastasis', 'Metastasis_Date', 'Metastasis_Loc', 'HIST_AJCC', 'HIST_AJCC_Final', 'HIST_BRESLOW_mm', 'HIST_Ulceration', 'HIST_Mitosis', 'GM-CSF','IL-4', 'IL-6', 'IL-10', 'IL-17A', 'IFN-y', 'TGF-b', 'Dermcidina', 'IHC-BRAF','PIRIN', 'BCL2', 'Linfos_BCL2+', 'BCL3','Linfos_BCL3+', 'PEBP1', 'MITF', 'ANX5', 'infiltrado linfoide', 'infiltrado macrofagos')
+```
+
+**Applying Column Names**
+```{r}
+colnames(Mel) <- Colnames
+colnames(Bas) <- Colnames
+colnames(Cru) <- Colnames
+```
+
+**Further Filtering of Empty Rows & Metadata**
+```{r}
+Cru <- Cru %>% 
+  dplyr::filter(Code!='') %>% 
+  dplyr::filter(Sex!='SEXO')
+Bas <- Bas %>% 
+  dplyr::filter(Code!='') %>% 
+  dplyr::filter(Sex!='SEXO')
+Mel <- Mel %>% 
+  dplyr::filter(Code!='') %>% 
+  dplyr::filter(Sex!='SEXO')
+
+write_csv(Mel, file='Mel_Filtered.csv')
+write_csv(Bas, file='Bas_Filtered.csv')
+write_csv(Cru, file='Cru_Filtered.csv')
+```
+
+**Combining Df**
+```{r}
+Combined_df <- rbind(Mel,Bas,Cru)
+head(Combined_df)
+```
+
+**Clearing Missing Data**
+```{r}
+clear_missing <- function(df, cols) {
+  df1 <- df 
+  for (i in cols) {
+    df1 <- df1 %>% 
+      mutate(!!sym(i) := ifelse(.data[[i]] == '', NA, .data[[i]]))
+  }
+  return(df1)
+}
+Combined_df <- clear_missing(Combined_df, Colnames)
+```
+
+# Changing Data Types
+
+**Column: 'Sex'**
+```{r}
+unique(Combined_df$Sex)
+Combined_df$Sex <- case_when(
+  Combined_df$Sex == "Mujer" ~ 'Female',
+  Combined_df$Sex == "MUjer" ~ 'Female',
+  Combined_df$Sex == "Hombre" ~ 'Male',
+  Combined_df$Sex == "Hombre " ~ 'Male',
+  Combined_df$Sex == "Varón" ~ 'Male'
+)
+Combined_df$Sex <- as.factor(Combined_df$Sex)
+```
+
+**Column: 'Metastasis'**
+```{r}
+unique(Combined_df$Metastasis)
+Combined_df$Metastasis <- case_when(
+  Combined_df$Metastasis == "SI" ~ 1,
+  Combined_df$Metastasis == "No" ~ 0,
+  Combined_df$Metastasis == "NO" ~ 0,
+  Combined_df$Metastasis == "0" ~ 0,
+  Combined_df$Metastasis == "1" ~ 1,
+  Combined_df$Metastasis == "1 " ~1,
+  Combined_df$Metastasis == "" ~ NA
+)
+Combined_df$Metastasis <- as.factor(Combined_df$Metastasis)
+```
+
+**Columns: 'Metastasis_Date'**
+```{r}
+Combined_df$Metastasis_Date <- case_when(
+  Combined_df$Metastasis_Date == "no encuentro datos" ~ NA,
+  Combined_df$Metastasis_Date != "no encuentro datos" ~ Combined_df$Metastasis_Date
+)
+```
+
+**Column: 'HIST_AJCC'**
+```{r}
+unique(Combined_df$HIST_AJCC)
+Combined_df$HIST_AJCC <- case_when(
+  Combined_df$HIST_AJCC == "0" ~ 0,
+  Combined_df$HIST_AJCC == "NEVUS" ~ 0,
+  Combined_df$HIST_AJCC == "1" ~ 1,
+  Combined_df$HIST_AJCC == "IN SITU" ~ 1,
+  Combined_df$HIST_AJCC == "2" ~ 2,
+  Combined_df$HIST_AJCC == "IA" ~ 2,
+  Combined_df$HIST_AJCC == "2-1" ~ 2,
+  Combined_df$HIST_AJCC == "IA (pT1a)" ~ 2,
+  Combined_df$HIST_AJCC == "3" ~ 3,
+  Combined_df$HIST_AJCC == "IB" ~ 3,
+  Combined_df$HIST_AJCC == "4" ~ 4,
+  Combined_df$HIST_AJCC == "IIA" ~ 4,
+  Combined_df$HIST_AJCC == "IIA (pT3a)" ~ 4,
+  Combined_df$HIST_AJCC == "5" ~ 5,
+  Combined_df$HIST_AJCC == "IIB" ~ 5,
+  Combined_df$HIST_AJCC == "IIB (p3Tb)" ~ 5,
+  Combined_df$HIST_AJCC == "6" ~ 6,
+  Combined_df$HIST_AJCC == "IIC" ~ 6,
+  Combined_df$HIST_AJCC == "IB / IIC" ~ 6,
+  Combined_df$HIST_AJCC == "7" ~ 7,
+  Combined_df$HIST_AJCC == "IIIA" ~ 7,
+  Combined_df$HIST_AJCC == "8" ~ 8,
+  Combined_df$HIST_AJCC == "IIIB" ~ 8,
+  Combined_df$HIST_AJCC == "9" ~ 9,
+  Combined_df$HIST_AJCC == "IIIC" ~ 9,
+  Combined_df$HIST_AJCC == "nd IIIB a IV" ~ 9,
+  Combined_df$HIST_AJCC == "IIIC (pT4b pN2)" ~ 9,
+  Combined_df$HIST_AJCC == "10" ~ 10,
+  Combined_df$HIST_AJCC == "IV" ~ 10,
+  Combined_df$HIST_AJCC == "?" ~ NA,
+  Combined_df$HIST_AJCC == "nd" ~ NA,
+  Combined_df$HIST_AJCC == "REV" ~ NA,
+  Combined_df$HIST_AJCC == "PREGUNTAR A ANA" ~ NA
+)
+Combined_df$HIST_AJCC <- as.factor(Combined_df$HIST_AJCC)
+unique(Combined_df$HIST_AJCC)
+```
+
+**Column: 'HIST_AJCC_Final'**
+```{r}
+unique(Combined_df$HIST_AJCC_Final)
+Combined_df$HIST_AJCC_Final <- case_when(
+  Combined_df$HIST_AJCC_Final == "0" ~ 0,
+  Combined_df$HIST_AJCC_Final == "NEVUS" ~ 0,
+  Combined_df$HIST_AJCC_Final == "1" ~ 1,
+  Combined_df$HIST_AJCC_Final == "IN SITU" ~ 1,
+  Combined_df$HIST_AJCC_Final == "2" ~ 2,
+  Combined_df$HIST_AJCC_Final == "IA/in situ" ~ 2,
+  Combined_df$HIST_AJCC_Final == "I" ~ 2,
+  Combined_df$HIST_AJCC_Final == "IA" ~ 2,
+  Combined_df$HIST_AJCC_Final == "3" ~ 3,
+  Combined_df$HIST_AJCC_Final == "IB" ~ 3,
+  Combined_df$HIST_AJCC_Final == "4" ~ 4,
+  Combined_df$HIST_AJCC_Final == "IIA" ~ 4,
+  Combined_df$HIST_AJCC_Final == "5" ~ 5,
+  Combined_df$HIST_AJCC_Final == "IIB" ~ 5,
+  Combined_df$HIST_AJCC_Final == "IIC" ~ 6,
+  Combined_df$HIST_AJCC_Final == "IIIA" ~ 7,
+  Combined_df$HIST_AJCC_Final == " IIIA" ~ 7,
+  Combined_df$HIST_AJCC_Final == "7-9?" ~ 8,
+  Combined_df$HIST_AJCC_Final == "IIIB" ~ 8,
+  Combined_df$HIST_AJCC_Final == "IIIC" ~ 9,
+  Combined_df$HIST_AJCC_Final == "IIIC / IIID? / IV?" ~ 9,
+  Combined_df$HIST_AJCC_Final == "IIC?  IIIC/D? IV?" ~ 9,
+  Combined_df$HIST_AJCC_Final == "IIIC/D? IV?" ~ 9,
+  Combined_df$HIST_AJCC_Final == "IV" ~ 10,
+  Combined_df$HIST_AJCC_Final == "PREGUNTAR A ANA" ~ NA,
+  Combined_df$HIST_AJCC_Final == "Es una Mx" ~ NA,
+  Combined_df$HIST_AJCC_Final == "???" ~ NA,
+  Combined_df$HIST_AJCC_Final == "nd" ~ NA,
+  Combined_df$HIST_AJCC_Final == "?" ~ NA,
+)
+Combined_df$HIST_AJCC_Final <- as.factor(Combined_df$HIST_AJCC_Final)
+unique(Combined_df$HIST_AJCC_Final)
+```
+
+**Column: 'HIST_BRESLOW_mm'**
+```{r}
+unique(Combined_df$HIST_BRESLOW_mm)
+Combined_df$HIST_BRESLOW_mm <- case_when(
+  Combined_df$HIST_BRESLOW_mm == ">4" ~ 4,
+  Combined_df$HIST_BRESLOW_mm == "0,85\n" ~ 0.85,
+  Combined_df$HIST_BRESLOW_mm == "X" ~ NA_real_,
+  Combined_df$HIST_BRESLOW_mm == "NEVUS" ~ NA_real_,
+  Combined_df$HIST_BRESLOW_mm == "no aplica" ~ NA_real_,
+  Combined_df$HIST_BRESLOW_mm == "ND" ~ NA_real_,
+  TRUE ~ as.numeric(gsub(",", ".", Combined_df$HIST_BRESLOW_mm))
+)
+```
+
+**Column: 'HIST_Ulceration'**
+```{r}
+unique(Combined_df$HIST_Ulceration)
+Combined_df$HIST_Ulceration <- case_when(
+  Combined_df$HIST_Ulceration == 'No' ~ 0,
+  Combined_df$HIST_Ulceration == 'no' ~ 0,
+  Combined_df$HIST_Ulceration == 'ND' ~ NA,
+  Combined_df$HIST_Ulceration == 'Dudosa' ~ 0,
+  Combined_df$HIST_Ulceration == '0' ~ 0,
+  Combined_df$HIST_Ulceration == 'NO' ~ 0,
+  Combined_df$HIST_Ulceration == '1' ~ 1,
+  Combined_df$HIST_Ulceration == 'nd' ~ NA,
+  Combined_df$HIST_Ulceration == 'SÍ' ~ 1,
+  Combined_df$HIST_Ulceration == 'NO ' ~ 0,
+)
+Combined_df$HIST_Ulceration <- as.factor(Combined_df$HIST_Ulceration)
+```
+
+**Column: 'HIST_Mitosis'**
+```{r}
+unique(Combined_df$HIST_Mitosis)
+Combined_df$HIST_Mitosis <- case_when(
+  Combined_df$HIST_Mitosis == 'ND' ~ NA,
+  Combined_df$HIST_Mitosis == '0' ~ 0,
+  Combined_df$HIST_Mitosis == '1' ~ 1,
+  Combined_df$HIST_Mitosis == '16' ~ 16,
+  Combined_df$HIST_Mitosis == '2' ~ 2,
+  Combined_df$HIST_Mitosis == '<1' ~ 0,
+  Combined_df$HIST_Mitosis == '4' ~ 4,
+  Combined_df$HIST_Mitosis == '8' ~ 8,
+  Combined_df$HIST_Mitosis == '3' ~ 3,
+  Combined_df$HIST_Mitosis == '5 ' ~ 5,
+  Combined_df$HIST_Mitosis == 'SI' ~ NA,
+  Combined_df$HIST_Mitosis == 'abundantes' ~ NA,
+  Combined_df$HIST_Mitosis == 'ABUNDANTES' ~ NA,
+  Combined_df$HIST_Mitosis == 'bajo' ~ NA,
+  Combined_df$HIST_Mitosis == '6/CAMPO' ~ 6,
+  Combined_df$HIST_Mitosis == '7' ~ 7,
+  Combined_df$HIST_Mitosis == '9' ~ 9,
+  Combined_df$HIST_Mitosis == 'si' ~ NA,
+  Combined_df$HIST_Mitosis == 'X' ~ NA,
+  Combined_df$HIST_Mitosis == '< 1' ~ 0,
+  Combined_df$HIST_Mitosis == '6' ~ 6,
+  Combined_df$HIST_Mitosis == '20' ~ 20,
+  Combined_df$HIST_Mitosis == '15' ~ 15,
+  Combined_df$HIST_Mitosis == '10' ~ 10,
+  Combined_df$HIST_Mitosis == '0-1/2' ~ 0,
+  Combined_df$HIST_Mitosis == '41' ~ 41,
+  Combined_df$HIST_Mitosis == '30' ~ 30,
+  Combined_df$HIST_Mitosis == '13' ~ 13,
+  Combined_df$HIST_Mitosis == '19' ~ 19,
+)
+```
+
+**Column: 'GM-CSF'**
+```{r}
+unique(Combined_df$`GM-CSF`)
+Combined_df$`GM-CSF` <- case_when(
+  Combined_df$`GM-CSF` == "<1.22" ~ 1.22,
+  Combined_df$`GM-CSF` == "<0,64" ~ 0.64,
+  Combined_df$`GM-CSF` == "datos?" ~ NA_real_,
+  Combined_df$`GM-CSF` == "<1,22" ~ 1.22,
+  Combined_df$`GM-CSF` == '-' ~ NA_real_,
+  Combined_df$`GM-CSF` == "NO HAY SUERO" ~ NA_real_,
+  TRUE ~ as.numeric(gsub(",", "", Combined_df$`GM-CSF`))
+)
+```
+
+**Column: 'IL-4'**
+```{r}
+unique(Combined_df$`IL-4`)
+Combined_df$`IL-4` <- case_when(
+  Combined_df$`IL-4` == "<1.83" ~ 1.83,
+  Combined_df$`IL-4` == "<0,18" ~ 0.18,
+  Combined_df$`IL-4` == "datos?" ~ NA_real_,
+  Combined_df$`IL-4` == "<1,83" ~ 1.83,
+  Combined_df$`IL-4` == '-' ~ NA_real_,
+  Combined_df$`IL-4` == "NO HAY SUERO" ~ NA_real_,
+  TRUE ~ as.numeric(gsub(",", "", Combined_df$`IL-4`))
+)
+```
+
+**Column: 'IL-6'**
+```{r}
+unique(Combined_df$`IL-6`)
+Combined_df$`IL-6` <- case_when(
+  Combined_df$`IL-6` == "<1,46" ~ 1.46,
+  Combined_df$`IL-6` == "< 1.46" ~ 1.46,
+  Combined_df$`IL-6` == "<0.18" ~ 0.18,
+  Combined_df$`IL-6` == "datos?" ~ NA_real_,
+  Combined_df$`IL-6` == "<1,83" ~ 1.83,
+  Combined_df$`IL-6` == '-' ~ NA_real_,
+  Combined_df$`IL-6` == "NO HAY SUERO" ~ NA_real_,
+  TRUE ~ as.numeric(gsub(",", "", Combined_df$`IL-6`))
+)
+```
+
+**Column: 'IL-10'**
+```{r}
+unique(Combined_df$`IL-10`)
+Combined_df$`IL-10` <- case_when(
+  Combined_df$`IL-10` == "<0,73" ~ 0.73,
+  Combined_df$`IL-10` == "< 1.46" ~ 1.46,
+  Combined_df$`IL-10` == "< 0.73" ~ 0.73,
+  Combined_df$`IL-10` == "datos?" ~ NA_real_,
+  Combined_df$`IL-10` == "<1,83" ~ 1.83,
+  Combined_df$`IL-10` == '-' ~ NA_real_,
+  Combined_df$`IL-10` == "NO HAY SUERO" ~ NA_real_,
+  TRUE ~ as.numeric(gsub(",", "", Combined_df$`IL-10`))
+)
+```
+
+**Column: 'IL-17A'**
+```{r}
+unique(Combined_df$`IL-17A`)
+Combined_df$`IL-17A` <- case_when(
+  Combined_df$`IL-17A` == "<1,22" ~ 1.22,
+  Combined_df$`IL-17A` == "< 1.46" ~ 1.46,
+  Combined_df$`IL-17A` == "< 0.73" ~ 0.73,
+  Combined_df$`IL-17A` == "datos?" ~ NA_real_,
+  Combined_df$`IL-17A` == "<1,83" ~ 1.83,
+  Combined_df$`IL-17A` == '-' ~ NA_real_,
+  Combined_df$`IL-17A` == "NO HAY SUERO" ~ NA_real_,
+  TRUE ~ as.numeric(gsub(",", "", Combined_df$`IL-17A`))
+)
+```
+
+**Column: 'IFN-y'**
+```{r}
+unique(Combined_df$`IFN-y`)
+Combined_df$`IFN-y` <- case_when(
+  Combined_df$`IFN-y` == "<0,61" ~ 0.61,
+  Combined_df$`IFN-y` == "< 1.46" ~ 1.46,
+  Combined_df$`IFN-y` == "< 0.61" ~ 0.61,
+  Combined_df$`IFN-y` == "datos?" ~ NA_real_,
+  Combined_df$`IFN-y` == "<0.61" ~ 0.61,
+  Combined_df$`IFN-y` == '-' ~ NA_real_,
+  Combined_df$`IFN-y` == "NO HAY SUERO" ~ NA_real_,
+  TRUE ~ as.numeric(gsub(",", "", Combined_df$`IFN-y`))
+)
+```
+
+**Column: 'TGF-b'**
+```{r}
+unique(Combined_df$`TGF-b`)
+Combined_df$`TGF-b` <- case_when(
+  Combined_df$`TGF-b` == "X / 37,35" ~ 37.35,
+  Combined_df$`TGF-b` == ">300" ~ 300,
+  Combined_df$`TGF-b` == "X" ~ NA_real_,
+  Combined_df$`TGF-b` == "datos?" ~ NA_real_,
+  Combined_df$`TGF-b` == "<0.61" ~ 0.61,
+  Combined_df$`TGF-b` == '-' ~ NA_real_,
+  Combined_df$`TGF-b` == "NO HAY SUERO" ~ NA_real_,
+  TRUE ~ as.numeric(gsub(",", "", Combined_df$`TGF-b`))
+)
+```
+
+
+**Column: 'Dermcidina'**
+```{r}
+unique(Combined_df$Dermcidina)
+Combined_df$Dermcidina <- case_when(
+  Combined_df$Dermcidina == "X / 37,35" ~ 37.35,
+  Combined_df$Dermcidina == ">300" ~ 300,
+  Combined_df$Dermcidina == "X" ~ NA_real_,
+  Combined_df$Dermcidina == "datos?" ~ NA_real_,
+  Combined_df$Dermcidina == "<0.61" ~ 0.61,
+  Combined_df$Dermcidina == '-' ~ NA_real_,
+  Combined_df$Dermcidina == "NO HAY SUERO" ~ NA_real_,
+  TRUE ~ as.numeric(gsub(",", "", Combined_df$Dermcidina))
+)
+```
+
+
+**Column: 'IHC-BRAF'**
+```{r}
+unique(Combined_df$`IHC-BRAF`)
+Combined_df$`IHC-BRAF` <- case_when(
+  Combined_df$`IHC-BRAF` == "extracción DNA insuficiente" ~ NA_real_,
+  Combined_df$`IHC-BRAF` == "durante la tinción se ha perdido la muestra" ~ NA_real_,
+  Combined_df$`IHC-BRAF` == "Biopsia no recibida por no tener CI" ~ NA_real_,
+  Combined_df$`IHC-BRAF` == "Biopsia no recibida " ~ NA_real_,
+  Combined_df$`IHC-BRAF` == "negativo???" ~ NA_real_,
+  Combined_df$`IHC-BRAF` == 'Biopsia no recibida' ~ NA_real_,
+  Combined_df$`IHC-BRAF` == "con esta muestra NO se hace la inmuno" ~ NA_real_,
+  Combined_df$`IHC-BRAF` == "roto" ~ NA_real_,
+  Combined_df$`IHC-BRAF` == "nd" ~ NA_real_,
+  TRUE ~ as.numeric(gsub(",", "", Combined_df$`IHC-BRAF`))
+)
+```
+
+
+**Column: 'PIRIN'**
+```{r}
+unique(Combined_df$`PIRIN`)
+Combined_df$`PIRIN` <- case_when(
+  Combined_df$`PIRIN` == "DESPEGADO" ~ NA_real_,
+  Combined_df$`PIRIN` == "1 REPETIR" ~ 1,
+  Combined_df$`PIRIN` == "todos desaparecidos o rotos" ~ NA_real_,
+  Combined_df$`PIRIN` == "1 ¿?" ~ 1,
+  Combined_df$`PIRIN` == "2, FALTA H" ~ 2,
+  Combined_df$`PIRIN` == 'roto' ~ NA_real_,
+  Combined_df$`PIRIN` == "2 FALTA H" ~ 2,
+  Combined_df$`PIRIN` == "REPETIR" ~ NA_real_,
+  Combined_df$`PIRIN` == "2 RARO" ~ 2,
+  Combined_df$`PIRIN` == "1 FALTA H" ~ 1,
+  Combined_df$`PIRIN` == "desa" ~ NA_real_,
+  TRUE ~ as.numeric(Combined_df$`PIRIN`)
+)
+Combined_df$PIRIN <- as.factor(Combined_df$PIRIN)
+```
+
+**Column: 'BCL2'**
+```{r}
+unique(Combined_df$`BCL2`)
+Combined_df$`BCL2` <- case_when(
+  Combined_df$`BCL2` == "DESPEGADO" ~ NA_real_,
+  Combined_df$`BCL2` == "2 SIN H" ~ 2,
+  Combined_df$`BCL2` == "2 FALTA H" ~ 2,
+  Combined_df$`BCL2` == "REPETIR" ~ NA_real_,
+  Combined_df$`BCL2` == "1 FALTA H" ~ 1,
+  Combined_df$`BCL2` == '2 REPETIR' ~ 2,
+  Combined_df$`BCL2` == "1 REPETIR" ~ 1,
+  Combined_df$`BCL2` == "nd?" ~ NA_real_,
+  Combined_df$`BCL2` == "desa" ~ NA_real_,
+  TRUE ~ as.numeric(Combined_df$`BCL2`)
+)
+Combined_df$`BCL2` <- as.factor(Combined_df$`BCL2`)
+```
+
+**Column: 'Linfos_BCL2+'**
+```{r}
+unique(Combined_df$`Linfos_BCL2+`)
+Combined_df$`Linfos_BCL2+` <- case_when(
+  Combined_df$`Linfos_BCL2+` == "?¿" ~ NA_real_,
+  TRUE ~ as.numeric(Combined_df$`Linfos_BCL2+`)
+)
+Combined_df$`Linfos_BCL2+` <- as.factor(Combined_df$`Linfos_BCL2+`)
+```
+
+**Column: 'BCL3'**
+```{r}
+unique(Combined_df$`BCL3`)
+Combined_df$`BCL3` <- case_when(
+  Combined_df$`BCL3` == "DESPEGADO" ~ NA_real_,
+  Combined_df$`BCL3` == "0 DESPEGADO" ~ 0,
+  Combined_df$`BCL3` == "REPETIR" ~ NA_real_,
+  Combined_df$`BCL3` == "ROTO" ~ NA_real_,
+  Combined_df$`BCL3` == "1 FALTA H" ~ 1,
+  Combined_df$`BCL3` == '¿?' ~ NA_real_,
+  Combined_df$`BCL3` == "ROTOROTO" ~ NA_real_,
+  Combined_df$`BCL3` == "roto" ~ NA_real_,
+  Combined_df$`BCL3` == "desaparecido" ~ NA_real_,
+  TRUE ~ as.numeric(Combined_df$`BCL3`)
+)
+Combined_df$`BCL3` <- as.factor(Combined_df$`BCL3`)
+```
+
+**Column: 'Linfos_BCL3+'**
+```{r}
+unique(Combined_df$`Linfos_BCL3+`)
+Combined_df$`Linfos_BCL3+` <- case_when(
+  Combined_df$`Linfos_BCL3+` == "DESPEGADO" ~ NA_real_,
+  Combined_df$`Linfos_BCL3+` == "AP FOCALMENTE +" ~ NA_real_,
+  Combined_df$`Linfos_BCL3+` == "ROTO" ~ NA_real_,
+  TRUE ~ as.numeric(Combined_df$`Linfos_BCL3+`)
+)
+Combined_df$`Linfos_BCL3+` <- as.factor(Combined_df$`Linfos_BCL3+`)
+```
+
+**Column: 'PEBP1'**
+```{r}
+unique(Combined_df$`PEBP1`)
+Combined_df$`PEBP1` <- case_when(
+  Combined_df$`PEBP1` == "DESPEGADO" ~ NA_real_,
+  Combined_df$`PEBP1` == "0 DESENFOCADO" ~ 0,
+  Combined_df$`PEBP1` == "REPETIR" ~ NA_real_,
+  Combined_df$`PEBP1` == "0 y 2" ~ NA_real_,
+  Combined_df$`PEBP1` == "1 ¿?" ~ 1,
+  Combined_df$`PEBP1` == "1REPETIR" ~ 1,
+  Combined_df$`PEBP1` == "ROTO" ~ NA_real_,
+  TRUE ~ as.numeric(Combined_df$`PEBP1`)
+)
+Combined_df$`PEBP1` <- as.factor(Combined_df$`PEBP1`)
+```
+
+**Column: 'MITF'**
+```{r}
+unique(Combined_df$`MITF`)
+Combined_df$`MITF` <- case_when(
+  Combined_df$`MITF` == "NO HAY" ~ NA_real_,
+  Combined_df$`MITF` == "REPETIR" ~ NA_real_,
+  Combined_df$`MITF` == "1 y 2" ~ NA_real_,
+  Combined_df$`MITF` == "DESPEGADO" ~ NA_real_,
+  Combined_df$`MITF` == "ROTO Y FALTA H" ~ NA_real_,
+  Combined_df$`MITF` == "1 FALTA H" ~ 1,
+  Combined_df$`MITF` == "ROTO" ~ NA_real_,
+  Combined_df$`MITF` == "AP NEGATIVO" ~ 0,
+  Combined_df$`MITF` == "desaparecido" ~ NA_real_,
+  TRUE ~ as.numeric(Combined_df$`MITF`)
+)
+Combined_df$`MITF` <- as.factor(Combined_df$`MITF`)
+```
+
+**Column: 'ANXS'**
+```{r}
+unique(Combined_df$`ANX5`)
+Combined_df$`ANX5` <- case_when(
+  Combined_df$`ANX5` == "2 INTERESANTE" ~ 2,
+  Combined_df$`ANX5` == "2 FALTA H" ~ 2,
+  Combined_df$`ANX5` == "1 y 2" ~ NA_real_,
+  Combined_df$`ANX5` == "DESPEGADO" ~ NA_real_,
+  Combined_df$`ANX5` == "REPETIR" ~ NA_real_,
+  Combined_df$`ANX5` == "¿?" ~ NA_real_,
+  Combined_df$`ANX5` == "AP POSITIVO" ~ NA_real_,
+  Combined_df$`ANX5` == "roto" ~ NA_real_,
+  Combined_df$`ANX5` == "desaparecido" ~ NA_real_,
+  TRUE ~ as.numeric(Combined_df$`ANX5`)
+)
+Combined_df$`ANX5` <- as.factor(Combined_df$`ANX5`)
+```
+
+**Column: 'infiltrado linfoide'**
+```{r}
+unique(Combined_df$`infiltrado linfoide`)
+Combined_df$`infiltrado linfoide` <- case_when(
+  Combined_df$`infiltrado linfoide` == "3" ~ 2,
+  TRUE ~ as.numeric(Combined_df$`infiltrado linfoide`)
+)
+Combined_df$`infiltrado linfoide` <- as.factor(Combined_df$`infiltrado linfoide`)
+```
+
+**Column: 'infiltrado macrofagos'**
+```{r}
+unique(Combined_df$`infiltrado macrofagos`)
+Combined_df$`infiltrado macrofagos` <- case_when(
+  Combined_df$`infiltrado macrofagos` == "3" ~ 2,
+  TRUE ~ as.numeric(Combined_df$`infiltrado macrofagos`)
+)
+Combined_df$`infiltrado macrofagos` <- as.factor(Combined_df$`infiltrado macrofagos`)
+```
+
+```{r}
+write_csv(Combined_df, file='CombinedCleanedData.csv')
+```
+

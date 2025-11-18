@@ -1,0 +1,159 @@
+---
+title: "ML for Melanoma and Renal Cancer - Description of Data"
+author: "Cameron Preasmyer"
+date: "2025-08-28"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\begin{center}
+\textbf{\Large Variables}
+\end{center}
+
+
+## Patient-Level Variables
+
+- **Code**: Unique Patient ID Number  
+- **Sex**: Sex of the Patient  
+- **Metastasis**: Binary indicator of metastasis  
+- **Images**: Binary indicator for patients with any images  
+- **ANX_Image**: Binary indicator if patient has ANX specific image  
+- **BCL2_Image**: Binary indicator if patient has BCL2 specific image  
+- **BCL3_Image**: Binary indicator if patient has BCL3 specific image  
+- **HX_Image**: Binary indicator if patient has HX specific image  
+- **MITF_Image**: Binary indicator if patient has MITF specific image  
+- **PBP_Image**: Binary indicator if patient has PBP specific image  
+- **BRAF_Image**: Binary indicator if patient has BRAF specific image  
+- **PIR_Image**: Binary indicator if patient has PIR specific image  
+- **Metastasis_Date**: Date metastasis was confirmed  
+- **Metastasis_Loc**: Location of metastasis  
+
+## Histopathology
+
+- **Hist_AJCC**: AJCC staging (initial)  
+- **Hist_AJCC_Final**: AJCC staging (final)  
+- **Hist_Breslow_mm**: Breslow depth in millimeters  
+- **Hist_Ulceration**: Presence of ulceration  
+- **Hist_Mitosis**: Mitosis count per mm²  
+
+## Cytokine & Marker Expression
+
+- **GM.CSF**: Granulocyte-macrophage colony-stimulating factor  
+- **IL.4**: Interleukin-4 level  
+- **IL.6**: Interleukin-6 level  
+- **IL.10**: Interleukin-10 level  
+- **IL.17A**: Interleukin-17A level  
+- **IFN.y**: Interferon gamma level  
+- **TGF.b**: Transforming growth factor beta level  
+- **Dermcidina**: Dermcidin expression level  
+
+## Immunohistochemistry & Gene Expression
+
+- **IHC.BRAF**: Immunohistochemical result for BRAF  
+- **PIRIN**: PIRIN expression level  
+- **BCL2**: BCL2 expression level  
+- **Linfos_BCL2.**: BCL2 expression in lymphocytes  
+- **BCL3**: BCL3 expression level  
+- **Linfos_BCL3.**: BCL3 expression in lymphocytes  
+- **PEBP1**: PEBP1 expression level  
+- **MITF**: MITF expression level  
+- **ANX5**: ANX5 expression level  
+
+## Tumor Microenvironment
+
+- **infiltrado.linfoide**: Degree of lymphoid infiltration  
+- **infiltrado.macrofagos**: Degree of macrophage infiltration  
+
+\newpage
+
+\begin{center}
+\textbf{\Large Image Counts and Information}
+\end{center}
+
+\begin{center}
+\textbf{The bar chart below shows and compares the counts of all image types in the data for metastatic/non-metastatic patients}
+\end{center}
+\space
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+
+df <- read.csv('/Users/cameronpreasmyer/Desktop/Research\ Documents\ -\ ML\ for\ Melanoma/Cleaned\ CSV\ files/image_binaries.csv')
+df <- df %>%
+  mutate(Metastasis = if_else(is.na(Metastasis), 0, Metastasis))
+
+image_vars <- c("Images", "ANX_image", "BCL2_image", "BCL3_image", "HX_image",
+                "MITF_image", "PBP_image", "BRAF_image", "PIR_image")
+df_long <- df %>%
+  select(Code, Metastasis, all_of(image_vars)) %>%
+  pivot_longer(cols = all_of(image_vars), names_to = "Image_Type", values_to = "Has_Image") %>%
+  filter(Has_Image == 1)
+
+image_summary <- df_long %>%
+  group_by(Image_Type) %>%
+  summarise(
+    Total = n(),
+    Metastasis_1 = sum(Metastasis == 1)
+  ) %>%
+  pivot_longer(cols = c(Total, Metastasis_1), names_to = "Group", values_to = "Count")
+
+ggplot(image_summary, aes(x = reorder(Image_Type, -Count), y = Count, fill = Group)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black", width = 0.6) +
+  scale_fill_manual(values = c("Total" = "#3182bd", "Metastasis_1" = "#e6550d"),
+                    labels = c("Confirmed Metastasis", "Total Image Count")) +
+  labs(title = "Image Type Counts - Total Count vs. Metastatic Patients",
+       x = "Image Type",
+       y = "Number of Patients",
+       fill = "Group") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(face = "bold", size = 12, hjust = 0.5))
+```
+
+\begin{center}
+\textbf{The pie charts below comapre the proportion of patients who have at least one image between metastitic patients and all patients}
+\end{center}
+  
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(patchwork)
+
+meta_image_data <- df %>%
+  filter(Metastasis == 1) %>%
+  count(Has_Image = Images) %>%
+  mutate(Group = if_else(Has_Image == 1, "Has 1+ Images", "No Images"))
+all_image_data <- df %>%
+  count(Has_Image = Images) %>%
+  mutate(Group = if_else(Has_Image == 1, "Has 1+ Images", "No Images"))
+meta_image_data <- meta_image_data %>%
+  mutate(Prop = n / sum(n),
+         Label = paste0(round(Prop * 100), "%"))
+all_image_data <- all_image_data %>%
+  mutate(Prop = n / sum(n),
+         Label = paste0(round(Prop * 100), "%"))
+
+
+p1 <- ggplot(meta_image_data, aes(x = "", y = n, fill = Group)) +
+  geom_bar(stat = "identity", width = 1, color='grey15') +
+  coord_polar("y") +
+  geom_text(aes(label = Label), position = position_stack(vjust = 0.5), color = "black", size = 5) +
+  labs(title = "Metastatic Patients") +
+  theme_void() +
+  theme(plot.title = element_text(face = "bold", size = 12,hjust=0.5))+
+  scale_fill_manual(values = c("Has 1+ Images" = "lightblue2", "No Images" = "grey"))
+
+p2 <- ggplot(all_image_data, aes(x = "", y = n, fill = Group)) +
+  geom_bar(stat = "identity", width = 1, color='grey15') +
+  coord_polar("y") +
+  geom_text(aes(label = Label), position = position_stack(vjust = 0.5), color = "black", size = 5) +
+  labs(title = "All Patients") +
+  theme_void() +
+  theme(plot.title = element_text(face = "bold", size = 12,hjust=0.5))+
+  scale_fill_manual(values = c("Has 1+ Images" = "lightblue2", "No Images" = "grey"))
+p1+p2
+
+```
+
+
